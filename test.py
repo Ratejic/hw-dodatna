@@ -15,21 +15,17 @@ def all_columns(X, rand):
 def random_feature(X, rand):
     return [rand.choice(list(range(X.shape[1])))]
 
+
 def random_sqrt_columns(X, rand):
     return rand.sample(range(X.shape[1]), int(np.sqrt(X.shape[1])))
 
-class TreeNode:
+class Node:
     def __init__(self, feature=None, threshold=None, value=None, left=None, right=None):
         self.feature = feature  # Index of the feature to split on
         self.threshold = threshold  # Threshold value for the split
         self.value = value  # Leaf node value (class label)
         self.left = left  # Left subtree
         self.right = right  # Right subtree
-
-    def __str__(self):
-        if self.value is not None:
-            return "Leaf node" + str(self.value)
-        return f"Not a leaf node, feature: {self.feature}, threshold: {self.threshold}, {'has left and right' if self.left and self.right else 'missing one or both child nodes'}"
 
 
 class Tree:
@@ -38,67 +34,48 @@ class Tree:
         self.get_candidate_columns = get_candidate_columns
         self.min_samples = min_samples
         self.root = None
+        self.importance_values = None
 
     def build(self, X, y):
         self.root = self._build_tree(X, y)
-        self.X = X
-        self.y = y
         return self
 
     def _build_tree(self, X, y):
         if len(np.unique(y)) == 1:
-            return TreeNode(value=y[0])
+            return Node(value=y[0])
 
-        if len(X) < self.min_samples:
-            return TreeNode(value=self._get_majority_class(y))
+        if len(X) <= self.min_samples:
+            return Node(value=self._get_majority_class(y))
 
-        feature_idxs = self.get_candidate_columns(X, self.rand)
+        feature_idx = self.get_candidate_columns(X, self.rand)[0]
         best_threshold = None
-        best_feature = None
-        best_gini = 10
-        #print(f"feture_idxs: {feature_idxs}")
-        for feature in feature_idxs:
-            #print(f"tresholds: {np.unique(X[:, feature])}")
-            for threshold in np.unique(X[:, feature]):
-                left_mask = X[:, feature] <= threshold
+        best_gini = float('inf')
 
-                left_y = y[left_mask]
-                right_y = y[~left_mask]
+        for threshold in np.unique(X[:, feature_idx]):
+            left_mask = X[:, feature_idx] <= threshold
 
-                gini = self._calculate_gini(left_y, right_y)
+            left_y = y[left_mask]
+            right_y = y[~left_mask]
 
-                if gini < best_gini and len(left_y) > 0 and len(right_y) > 0:
-                    best_gini = gini
-                    best_threshold = threshold
-                    best_feature = feature
+            gini = self._calculate_gini(left_y, right_y)
 
+            if gini < best_gini:
+                best_gini = gini
+                best_threshold = threshold
 
-        if best_feature is None:
-            return TreeNode(value=self._get_majority_class(y))
+        if best_threshold is None:
+            return Node(value=self._get_majority_class(y))
 
-        left_mask = X[:, best_feature] <= best_threshold
+        left_mask = X[:, feature_idx] <= best_threshold
         left_X, left_y = X[left_mask], y[left_mask]
         right_X, right_y = X[~left_mask], y[~left_mask]
 
-        """ left_subtree = self._build_tree(left_X, left_y)
-        right_subtree = self._build_tree(right_X, right_y) """
+        left_subtree = self._build_tree(left_X, left_y)
+        right_subtree = self._build_tree(right_X, right_y)
 
-        levii, desnii = self.razdeli(X[:, best_feature], best_threshold)
-        left_subtree = self._build_tree(X[levii, :], y[levii])
-        right_subtree = self._build_tree(X[desnii, :], y[desnii])
+        self.importance_values = best_gini
 
-        if not best_feature:
-            pass
-            #print(f"best feature: {best_feature}, best threshold: {best_threshold}, left subtree: {left_subtree}, right subtree: {right_subtree}")
-        return TreeNode(feature=best_feature, threshold=best_threshold, left=left_subtree, right=right_subtree)
-
-    def razdeli(self, X, threshold):
-        levi = np.argwhere(X <= threshold)
-        levi = levi.flatten()
-        desni = np.argwhere(X > threshold)
-        desni = desni.flatten()
-        return levi, desni
-
+        return Node(feature=feature_idx, threshold=best_threshold, left=left_subtree, right=right_subtree)
 
     def _calculate_gini(self, left_y, right_y):
         left_count = len(left_y)
@@ -142,19 +119,22 @@ class RandomForest:
         self.importance_values = None
 
     def build(self, X, y):
-        self.X = X
-        self.y = y
         num_samples = len(X)
         num_features = X.shape[1]
         self.importance_values = np.zeros(num_features)
+        oob_votes = np.zeros((num_samples, len(np.unique(y))), dtype=int)
+        oob_counts = np.zeros(num_samples, dtype=int)
 
         for _ in range(self.n):
             tree = Tree(rand=self.rand, get_candidate_columns=self.get_candidate_columns, min_samples=2)
             bootstrap_indices = self.rand.choices(range(num_samples), k=num_samples)
             bootstrap_X, bootstrap_y = X[bootstrap_indices], y[bootstrap_indices]
+            oob_indices = [i for i in range(num_samples) if i not in bootstrap_indices]
             tree.build(bootstrap_X, bootstrap_y)
+            self._accumulate_oob_votes(tree, X, y, oob_votes, oob_counts, oob_indices)
             self.trees.append(tree)
 
+        self._calculate_importance_values(X, y, oob_votes, oob_counts)
         return self
     
     def get_candidate_columns(self, X, rand):
@@ -168,26 +148,34 @@ class RandomForest:
             predictions.append(tree.predict(X))
         return np.array([Counter(row).most_common(1)[0][0] for row in np.array(predictions).T])
 
+    def _accumulate_oob_votes(self, tree, X, y, oob_votes, oob_counts, oob_indices):
+        predictions = tree.predict(X[oob_indices])
+        unique_labels = np.unique(y)
+        for i, idx in enumerate(oob_indices):
+            label_idx = np.where(unique_labels == predictions[i])[0][0]
+            oob_votes[idx][label_idx] += 1
+            oob_counts[idx] += 1
+
+    def _calculate_importance_values(self, X, y, oob_votes, oob_counts):
+        num_samples = len(X)
+        num_features = X.shape[1]
+        oob_indices = np.where(oob_counts > 0)[0]
+        oob_y = y[oob_indices]
+        predictions = np.argmax(oob_votes[oob_indices], axis=1)
+
+        for feature in range(num_features):
+            original_predictions = predictions[X[oob_indices, feature] == X[oob_indices, feature]]
+            perturbed_predictions = predictions[X[oob_indices, feature] != X[oob_indices, feature]]
+            original_error = np.mean(original_predictions != oob_y[X[oob_indices, feature] == X[oob_indices, feature]])
+            perturbed_error = np.mean(perturbed_predictions != oob_y[X[oob_indices, feature] != X[oob_indices, feature]])
+            if math.isnan(perturbed_error):
+                perturbed_error = 1
+            self.importance_values[feature] += original_error
+
     def importance(self):
-        num_features = self.X.shape[1]
-        importances = np.zeros(num_features)
-        num_samples = len(self.y)
-
-        for tree in self.trees:
-            y_pred = tree.predict(self.X)
-            accuracy = np.mean(self.y == y_pred)
-
-            for feature_idx in range(num_features):
-                X_perm = np.copy(self.X)
-                perm_indices = np.random.permutation(num_samples)
-                X_perm[:, feature_idx] = X_perm[perm_indices, feature_idx]
-                y_pred_perm = tree.predict(X_perm)
-                accuracy_perm = np.mean(self.y == y_pred_perm)
-
-                importances[feature_idx] += accuracy - accuracy_perm
-
-        return importances / len(self.trees)
-        
+        return self.importance_values
+    
+    
     
 # Return misclassification rates on training and testing data
 def hw_tree_full(train, test):
@@ -218,9 +206,8 @@ def hw_tree_full(train, test):
     print(train_mis, test_mis)
     print(pred_train)
 
-    train_succ = 1 - train_mis
-    test_succ = 1 - test_mis
-    return [(train_succ, train_mis), (test_succ, test_mis)]
+
+    return [(0.0, train_mis), (0.0, test_mis)]
 
 
 def hw_randomforests(train, test):
@@ -233,8 +220,6 @@ def hw_randomforests(train, test):
 
     # train model
     rf.build(trainX, trainY)
-
-    print(rf.trees)
 
     # predict
     pred_train = rf.predict(trainX)
@@ -253,19 +238,12 @@ def hw_randomforests(train, test):
     print(train_mis, test_mis)
     print(pred_train)
 
-    train_succ = 1 - train_mis
-    test_succ = 1 - test_mis
-    return [(train_succ, train_mis), (test_succ, test_mis)]
+    return [(0.0, train_mis), (0.0, test_mis)]
 
 
 if __name__=="__main__":
-    """ X = np.array([[0, 0],[0, 1],[1, 0],[1, 1]])
-    y = np.array([0, 0, 1, 1])
-    train = X[:3], y[:3]
-    test = X[3:], y[3:]
-    print(hw_randomforests(train, test)) """
     # read data
-    """ tki = pd.read_csv("tki-resistance.csv")
+    tki = pd.read_csv("tki-resistance.csv")
     
     # split data
     y = tki.iloc[:, -1]
@@ -306,26 +284,26 @@ if __name__=="__main__":
     train_missk = np.mean(pred_trainsk != train[1])
     test_missk = np.mean(pred_testsk != test[1])
 
-    print(train_mis, test_mis)
-    print(train_missk, test_missk)
+    #print(train_mis, test_mis)
+    #print(train_missk, test_missk)
 
     # build only one tree
-    t = Tree(min_samples=2, rand=random.Random(0), get_candidate_columns=random_feature)
+    """ t = Tree(min_samples=2, rand=random.Random(0), get_candidate_columns=random_feature)
     t.build(train[0], train[1])
     pred_test = t.predict(test[0])
     test_mis = np.mean(pred_test != test[1])
     print("misclassification rate of one tree:")
-    print(test_mis)
+    print(test_mis) """
 
     # build 100 trees
-    rf = RandomForest(rand=random.Random(0), n=100)
+    """ rf = RandomForest(rand=random.Random(0), n=100)
     rf.build(train[0], train[1])
     pred_test = rf.predict(test[0])
     test_mis = np.mean(pred_test != test[1])
     print("misclassification rate of 100 trees:")
-    print(test_mis)
+    print(test_mis) """
 
-    mis = []
+    """ mis = []
     for i in range(1, 101):
         rf = RandomForest(rand=random.Random(0), n=i)
         rf.build(train[0], train[1])
@@ -337,33 +315,19 @@ if __name__=="__main__":
     plt.plot(mis)
     # save image
     plt.savefig("mis.png")
-    plt.show()
+    plt.show() """
 
     # variable importance
     rf = RandomForest(rand=random.Random(0), n=100)
     rf.build(train[0], train[1])
     importance = rf.importance()
-    # plot importance
-    plt.plot(importance)
-    # save image
-    plt.savefig("importance.png")
-    plt.show()
-    # biggest importance
-    b = np.argsort(importance)[-1]
-    print(b)
+    print("variable importance:")
+    print(importance)
 
-    # variable importance using sklearn
+    """ # variable importance using sklearn
     rfsk = RandomForestClassifier(n_estimators=100, random_state=0, oob_score=True)
     rfsk.fit(train[0], train[1])
-    importancesk = rfsk.feature_importances_
-    # plot importance
-    plt.plot(importancesk)
-    # save image
-    plt.savefig("importancesk.png")
-    plt.show()
-    # biggest importance
-    bsk = np.argsort(importancesk)[-1]
-    print(bsk) """
-
-    
+    importance = rfsk.feature_importances_
+    print("variable importance using sklearn:")
+    print(importance) """
 
