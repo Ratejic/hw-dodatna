@@ -265,7 +265,7 @@ if __name__=="__main__":
     test = X[3:], y[3:]
     print(hw_randomforests(train, test)) """
     # read data
-    """ tki = pd.read_csv("tki-resistance.csv")
+    tki = pd.read_csv("tki-resistance.csv")
     
     # split data
     y = tki.iloc[:, -1]
@@ -286,7 +286,9 @@ if __name__=="__main__":
     # model
     rf = RandomForest(rand=random.Random(0), n=100)
     rfsk = RandomForestClassifier(n_estimators=100, random_state=0)
-
+    
+    
+    """
     # run model
     rf.build(train[0], train[1])
     rfsk.fit(train[0], train[1])
@@ -338,20 +340,23 @@ if __name__=="__main__":
     # save image
     plt.savefig("mis.png")
     plt.show()
-
+    """
     # variable importance
     rf = RandomForest(rand=random.Random(0), n=100)
     rf.build(train[0], train[1])
     importance = rf.importance()
+    # normalize importance on 1-100 scale
+    importance = importance / np.max(importance) * 100.0
+
     # plot importance
     plt.plot(importance)
     # save image
-    plt.savefig("importance.png")
-    plt.show()
+    #plt.savefig("importance.png")
+    #plt.show()
     # biggest importance
     b = np.argsort(importance)[-1]
-    print(b)
-
+    #print(b)
+    """
     # variable importance using sklearn
     rfsk = RandomForestClassifier(n_estimators=100, random_state=0, oob_score=True)
     rfsk.fit(train[0], train[1])
@@ -365,5 +370,14 @@ if __name__=="__main__":
     bsk = np.argsort(importancesk)[-1]
     print(bsk) """
 
+    rf = RandomForest(rand=random.Random(0), n=100)
+    rf.build(train[0], train[1])
+    features = []
+    for tree in rf.trees:
+        root = tree.root
+        features.append(root.feature)
     
+    plt.scatter(features, np.arange(1, 101), color="red")
+    plt.savefig("features.png")
+    plt.show()
 

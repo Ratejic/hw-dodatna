@@ -28,13 +28,17 @@ Graf jasno prikazuje, kako stopnje napačne klasifikacije upadajo s povečevanje
 
 Pomembnost značilk za dani nabor podatkov za RF z n=100 drevesi je prikazana na desnem grafu. Za primerjavo so na levem grafu prikazane značilke dobljene s knjižnico sklearn. Vidimo lahko, da so značilke zelo podobno pomembne in da je pri obeh metodah najpomembnejša značilka 75.
 
-![Pomembnost značilk za RF z n=100 drevesi](mis5/importance.jpg) ![Pomembnost značilk za RF(sklearn) z n=100 drevesi](mis5/importancesk.jpg)
+![Pomembnost značilk za RF z n=100 drevesi](mis7/importance.jpg) ![Pomembnost značilk za RF(sklearn) z n=100 drevesi](mis7/importancesk.jpg)
 
-Za primerjavo so na istem grafu prikazane tudi značilke iz korenin 100 ne-naključnih dreves. Značilke iz ne-naključnih dreves so bile smiselno izbrane, da se proizvedejo različna drevesa.
+Za primerjavo so na istem grafu prikazane tudi značilke iz korenin 100 ne-naključnih dreves.
+
+![Pomembnost značilk za RF z n=100 drevesi](features7.jpeg)
+
+Korelacija med pomembnostjo značilk in značilkami v korenu drevesov v Random Forest modelu je lepo razvidna iz grafa. Značilke, ki so bolj pomembne, so pogosto prisotne v korenu drevesa, zato obstaja visoka korelacija med pomembnostjo značilk in njihovo prisotnostjo v korenu drevesa.
 
 
 ## Zaključek
 
-Implementacija algoritma za gradnjo drevesa in pomembnosti značilk je pokazala pravilnost preko temeljitega testiranja in primerjave z rezultati knjižnice sklearn. Stopnje napačne klasifikacije iz hw_tree_full in hw_randomforest dokazujejo natančnost implementiranih modelov. Razmerje med številom dreves in stopnjami napačne klasifikacije prikazuje izboljšanje uspešnosti z večanjem števila dreves v naključnem gozdu. Analiza pomembnosti značilk poudarja pomen določenih značilk v procesu klasifikacije, pri čemer naključni gozdovi prekašajo ne-naključna drevesa v smislu stabilnosti in doslednosti rezultatov.
+Implementacija algoritma za gradnjo drevesa in pomembnosti značilk je pokazala pravilnost preko temeljitega testiranja in primerjave z rezultati knjižnice sklearn. Stopnje napačne klasifikacije iz hw_tree_full in hw_randomforest dokazujejo natančnost implementiranih modelov. Razmerje med številom dreves in stopnjami napačne klasifikacije prikazuje izboljšanje uspešnosti z večanjem števila dreves v naključnem gozdu. Analiza pomembnosti značilk poudarja pomen določenih značilk v procesu klasifikacije.
 
 Skupni rezultati potrjujejo pravilnost implementacije in učinkovitost naključnih gozdov kot močne tehnike klasifikacije.
